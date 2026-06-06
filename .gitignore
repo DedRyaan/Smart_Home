@@ -1,0 +1,37 @@
+# PlatformIO
+.pio/
+.pioenvs/
+.piolibdeps/
+.clang_complete
+.gcc-flags.json
+lib/readme.txt
+
+# Build artifacts
+*.bin
+*.elf
+*.map
+*.hex
+*.o
+*.a
+build/
+
+# Arduino IDE
+*.ino.cpp
+*.ino.with_bootloader.*
+
+# Editor / IDE
+.vscode/
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Secrets (Wi-Fi creds captured at runtime via WiFiManager, but ignore any local config)
+secrets.h
+wifi_config.h
+*.local
