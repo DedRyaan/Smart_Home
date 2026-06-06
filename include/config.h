@@ -28,5 +28,18 @@ enum AcMode { AC_MODE_COOL = 0, AC_MODE_FAN = 1, AC_MODE_DRY = 2, AC_MODE_AUTO =
 #define HOSTNAME "smarthome"        // reachable at http://smarthome.local
 #define AP_NAME  "SmartHome-Setup"  // captive-portal SSID on first boot
 
+// Secrets: override these in an (untracked) secrets.h if you prefer to keep them
+// out of source control. CHANGE THESE before deploying.
+#if __has_include("secrets.h")
+  #include "secrets.h"
+#endif
+#ifndef AP_PASSWORD
+  #define AP_PASSWORD  "smart-setup"   // >= 8 chars; WPA2 on the setup AP
+#endif
+#ifndef OTA_PASSWORD
+  #define OTA_PASSWORD "change-me-ota"  // required to push OTA firmware
+#endif
+
 // ---------- Persistence ----------
-#define NVS_NAMESPACE "smarthome"
+#define NVS_NAMESPACE   "smarthome"
+#define PERSIST_DELAY_MS 3000        // quiet period before flushing state to NVS
