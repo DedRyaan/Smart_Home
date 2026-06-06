@@ -41,14 +41,33 @@ On first boot connect to the **`SmartHome-Setup`** Wi-Fi AP and enter your Wi-Fi
 (captive portal). Then open `http://smarthome.local/`.
 
 In the Alexa app: **Devices → +  → Add Device → Other → Discover**. Five devices appear:
-`Light 1/2/3`, `Fan`, `AC`.
+`Light 1/2/3`, `Fan`, `AC`. If discovery fails on a Gen-3/4 Echo (Espalexa emulates the
+legacy Hue v1 bridge, which newer Echos discover less reliably), check
+`http://smarthome.local/espalexa` to confirm the devices are registered, then re-run Discover.
+
+## Security
+
+This is a LAN device that switches mains relays, so:
+
+- **Set passwords.** Copy `secrets.example.h` → `secrets.h` and set `OTA_PASSWORD` and
+  `AP_PASSWORD` (or edit the defaults in `config.h`). `secrets.h` is gitignored.
+- **Put it on an IoT/guest VLAN** with no internet egress — the most effective mitigation,
+  since the relay/AC HTTP API and the Hue/SSDP emulation are unauthenticated by design.
 
 ## Capturing Croma AC codes
 
 1. Wire a VS1838B receiver to GPIO15 and flash `tools/ir_capture/ir_capture.ino`.
-2. Point the remote, press each command (Power OFF; Power ON at each temp 16–30 °C in Cool).
-3. Paste the printed raw arrays into `include/ac_codes.h` (`AC_OFF`, `AC_COOL_FRAMES`).
-4. Reflash the main firmware. Uncaptured frames are safely skipped until filled.
+2. Point the remote and read the **`Protocol:`** line it prints.
+   - **If it decodes to a known class** (Croma units are commonly `COOLIX` or `VOLTAS`),
+     prefer the IRremoteESP8266 protocol class (e.g. `IRCoolixAC`) over raw frames — one
+     stateful object handles temp/mode/fan, no 15-row table needed.
+   - **If it reports `UNKNOWN`**, capture each command (Power OFF; Power ON at each temp
+     16–30 °C in Cool) and paste the raw arrays into `include/ac_codes.h`
+     (`AC_OFF`, `AC_COOL_FRAMES`).
+3. Reflash the main firmware. Uncaptured frames are safely skipped (logged) until filled.
+
+> Note: only **Cool** mode is wired to IR today; selecting Fan/Dry/Auto updates state but
+> sends no distinct frame until per-mode tables (or a protocol class) are added.
 
 ## API
 
