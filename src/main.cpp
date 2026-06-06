@@ -38,6 +38,18 @@ bool acPower = false;
 int  acTemp  = DEFAULT_AC_TEMP;
 int  acMode  = AC_MODE_COOL;
 
+// Async-safe IR: handlers/Alexa callbacks may run on the AsyncTCP task, where a
+// blocking sendRaw() would starve the stack. They request a send; loop() does it.
+volatile bool acDirty = false;
+
+// Deferred NVS persistence (coalesced in loop() to limit flash wear).
+bool     stateDirty = false;
+uint32_t lastStateChangeMs = 0;
+bool     savedRelay[RELAY_COUNT];   // shadow of last-persisted values
+bool     savedAcPower;
+int      savedAcTemp;
+int      savedAcMode;
+
 struct SwitchInput {
   bool     lastReading;
   bool     lastStable;
@@ -50,18 +62,33 @@ EspalexaDevice* devFan      = nullptr;
 EspalexaDevice* devAc       = nullptr;
 
 // ---------- Persistence ----------
-void saveState() {
-  prefs.putBytes("relays", relayState, sizeof(relayState));
-  prefs.putBool("acPower", acPower);
-  prefs.putInt("acTemp", acTemp);
-  prefs.putInt("acMode", acMode);
+// Mark state changed; the real NVS write is coalesced in loop() (flash wear).
+void markStateDirty() {
+  stateDirty = true;
+  lastStateChangeMs = millis();
+}
+
+// Write only the keys whose value actually changed.
+void persistNow() {
+  if (memcmp(savedRelay, relayState, sizeof(relayState)) != 0) {
+    prefs.putBytes("relays", relayState, sizeof(relayState));
+    memcpy(savedRelay, relayState, sizeof(relayState));
+  }
+  if (savedAcPower != acPower) { prefs.putBool("acPower", acPower); savedAcPower = acPower; }
+  if (savedAcTemp  != acTemp)  { prefs.putInt("acTemp", acTemp);    savedAcTemp  = acTemp; }
+  if (savedAcMode  != acMode)  { prefs.putInt("acMode", acMode);    savedAcMode  = acMode; }
 }
 
 void loadState() {
-  prefs.getBytes("relays", relayState, sizeof(relayState));
+  if (prefs.getBytes("relays", relayState, sizeof(relayState)) != sizeof(relayState)) {
+    memset(relayState, 0, sizeof(relayState));   // fresh/mismatched NVS -> all off
+  }
   acPower = prefs.getBool("acPower", false);
   acTemp  = prefs.getInt("acTemp", DEFAULT_AC_TEMP);
   acMode  = prefs.getInt("acMode", AC_MODE_COOL);
+  // Seed shadow so the first persistNow() doesn't rewrite unchanged keys.
+  memcpy(savedRelay, relayState, sizeof(relayState));
+  savedAcPower = acPower; savedAcTemp = acTemp; savedAcMode = acMode;
 }
 
 // ---------- Outputs ----------
@@ -76,6 +103,12 @@ void syncAlexaRelay(int i) {
   } else if (devFan) {
     devFan->setValue(relayState[i] ? 255 : 0);
   }
+}
+
+// Reflect AC state into the Alexa (Hue) device. Brightness encodes temperature,
+// so dashboard/temperature changes round-trip to the Alexa app's slider.
+void syncAlexaAc() {
+  if (devAc) devAc->setValue(acPower ? map(acTemp, AC_TEMP_MIN, AC_TEMP_MAX, 1, 254) : 0);
 }
 
 void sendAc() {
@@ -100,7 +133,7 @@ void handleSwitches() {
       relayState[i] = !relayState[i];          // any flip toggles
       applyRelay(i);
       syncAlexaRelay(i);
-      saveState();
+      markStateDirty();
     }
   }
 }
@@ -112,14 +145,14 @@ void deviceChanged(EspalexaDevice* d) {
     if (d == devLight[i]) {
       relayState[i] = d->getValue() > 0;
       applyRelay(i);
-      saveState();
+      markStateDirty();
       return;
     }
   }
   if (d == devFan) {
     relayState[3] = d->getValue() > 0;
     applyRelay(3);
-    saveState();
+    markStateDirty();
     return;
   }
   if (d == devAc) {
@@ -129,8 +162,8 @@ void deviceChanged(EspalexaDevice* d) {
     if (acPower && d->getValue() < 255) {
       acTemp = map(d->getValue(), 1, 254, AC_TEMP_MIN, AC_TEMP_MAX);
     }
-    sendAc();
-    saveState();
+    acDirty = true;        // transmit from loop(), not this (possibly async) context
+    markStateDirty();
     return;
   }
 }
@@ -187,7 +220,7 @@ void setupRoutes() {
     relayState[ch] = (st != 0);
     applyRelay(ch);
     syncAlexaRelay(ch);
-    saveState();
+    markStateDirty();
     sendStateJson(req);
   });
 
@@ -198,9 +231,9 @@ void setupRoutes() {
       acTemp = constrain(req->getParam("temp")->value().toInt(), AC_TEMP_MIN, AC_TEMP_MAX);
     if (req->hasParam("mode"))
       acMode = constrain(req->getParam("mode")->value().toInt(), AC_MODE_COOL, AC_MODE_AUTO);
-    sendAc();
-    if (devAc) devAc->setValue(acPower ? 255 : 0);
-    saveState();
+    acDirty = true;        // transmit from loop(), not this async handler
+    syncAlexaAc();
+    markStateDirty();
     sendStateJson(req);
   });
 }
@@ -213,8 +246,12 @@ void setup() {
   loadState();
 
   for (int i = 0; i < RELAY_COUNT; i++) {
+    // Drive the OFF level into the latch BEFORE enabling the output, so an
+    // active-LOW board doesn't briefly energize the relay as the pin switches
+    // to OUTPUT (which would otherwise default LOW = ON).
+    digitalWrite(RELAY_PINS[i], relayState[i] ? RELAY_ON_LEVEL : RELAY_OFF_LEVEL);
     pinMode(RELAY_PINS[i], OUTPUT);
-    applyRelay(i);                       // restore saved state before anything else
+    applyRelay(i);                       // restore saved state
     pinMode(SWITCH_PINS[i], INPUT_PULLUP);
   }
   // Seed switch positions WITHOUT toggling (only later changes toggle).
@@ -225,9 +262,11 @@ void setup() {
 
   irsend.begin();
 
+  WiFi.setAutoReconnect(true);           // recover automatically if the router blips
   WiFiManager wm;
   wm.setConfigPortalTimeout(180);
-  if (!wm.autoConnect(AP_NAME)) {
+  // Password-protected setup AP so the captive portal isn't an open access point.
+  if (!wm.autoConnect(AP_NAME, AP_PASSWORD)) {
     Serial.println(F("WiFi config timed out, restarting."));
     ESP.restart();
   }
@@ -235,11 +274,14 @@ void setup() {
   if (MDNS.begin(HOSTNAME)) MDNS.addService("http", "tcp", 80);
 
   ArduinoOTA.setHostname(HOSTNAME);
+  ArduinoOTA.setPassword(OTA_PASSWORD);  // require a password to push firmware
   ArduinoOTA.begin();
 
   setupRoutes();
   setupEspalexa();
   espalexa.begin(&server);   // attaches to our AsyncWebServer and starts it
+
+  if (acPower) acDirty = true;  // re-assert restored AC state on the unit (absolute frames)
 
   Serial.printf("Ready at http://%s.local/\n", HOSTNAME);
 }
@@ -248,4 +290,16 @@ void loop() {
   handleSwitches();
   espalexa.loop();
   ArduinoOTA.handle();
+
+  // Transmit AC IR here (off the async task) when requested.
+  if (acDirty) {
+    acDirty = false;
+    sendAc();
+  }
+
+  // Flush persisted state once changes settle, coalescing bursts.
+  if (stateDirty && (millis() - lastStateChangeMs) >= PERSIST_DELAY_MS) {
+    stateDirty = false;
+    persistNow();
+  }
 }
