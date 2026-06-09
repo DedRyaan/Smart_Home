@@ -14,7 +14,7 @@ static const uint8_t SWITCH_PINS[RELAY_COUNT] = {13, 14, 27, 26};
 #define DEBOUNCE_MS 30
 
 // ---------- IR ----------
-#define IR_LED_PIN  4    // -> 330 ohm -> 2N2222 base; LED in collector path
+#define IR_LED_PIN  18   // -> 1k ohm -> 2N2222 base; LED in collector path
 #define IR_RECV_PIN 15   // only used by tools/ir_capture during code capture
 #define IR_CARRIER_KHZ 38
 
@@ -24,22 +24,15 @@ static const uint8_t SWITCH_PINS[RELAY_COUNT] = {13, 14, 27, 26};
 #define DEFAULT_AC_TEMP 24
 enum AcMode { AC_MODE_COOL = 0, AC_MODE_FAN = 1, AC_MODE_DRY = 2, AC_MODE_AUTO = 3 };
 
-// ---------- Network ----------
-#define HOSTNAME "smarthome"        // reachable at http://smarthome.local
-#define AP_NAME  "SmartHome-Setup"  // captive-portal SSID on first boot
+// ---------- Persistence ----------
+#define NVS_NAMESPACE   "smarthome"
+#define PERSIST_DELAY_MS 500        // quiet period before flushing state to NVS
 
-// Secrets: override these in an (untracked) secrets.h if you prefer to keep them
-// out of source control. CHANGE THESE before deploying.
 #if __has_include("secrets.h")
   #include "secrets.h"
 #endif
-#ifndef AP_PASSWORD
-  #define AP_PASSWORD  "smart-setup"   // >= 8 chars; WPA2 on the setup AP
-#endif
-#ifndef OTA_PASSWORD
-  #define OTA_PASSWORD "change-me-ota"  // required to push OTA firmware
-#endif
 
-// ---------- Persistence ----------
-#define NVS_NAMESPACE   "smarthome"
-#define PERSIST_DELAY_MS 3000        // quiet period before flushing state to NVS
+// ---------- Onboard LED ----------
+#define ONBOARD_LED_PIN 2  // Onboard LED pin (usually GPIO 2 on ESP32 DevKit)
+
+

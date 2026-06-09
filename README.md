@@ -85,3 +85,4 @@ include/dashboard.h       embedded web UI
 include/ac_codes.h        captured Croma IR frames (fill after capture)
 tools/ir_capture/         one-time IR capture sketch
 ```
+.venv\Scripts\pio device monitor -e ir_blink -b 115200

@@ -36,3 +36,5 @@ Thumbs.db
 secrets.h
 wifi_config.h
 *.local
+compile_commands.json
+__pycache__/
