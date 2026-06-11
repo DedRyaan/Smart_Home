@@ -227,59 +227,47 @@ void sendAc() {
 
 // ---------- Matter Callback Handlers ----------
 bool setLight1OnOff(bool state) {
-  if (relayState[0] != state) {
-    relayState[0] = state;
-    applyRelay(0);
-    markStateDirty();
-  }
+  relayState[0] = state;
+  applyRelay(0);
+  markStateDirty();
   return true;
 }
 
 bool setLight2OnOff(bool state) {
-  if (relayState[1] != state) {
-    relayState[1] = state;
-    applyRelay(1);
-    markStateDirty();
-  }
+  relayState[1] = state;
+  applyRelay(1);
+  markStateDirty();
   return true;
 }
 
 bool setLight3OnOff(bool state) {
-  if (relayState[2] != state) {
-    relayState[2] = state;
-    applyRelay(2);
-    markStateDirty();
-  }
+  relayState[2] = state;
+  applyRelay(2);
+  markStateDirty();
   return true;
 }
 
 bool setFanOnOff(bool state) {
-  if (relayState[3] != state) {
-    relayState[3] = state;
-    applyRelay(3);
-    markStateDirty();
-  }
+  relayState[3] = state;
+  applyRelay(3);
+  markStateDirty();
   return true;
 }
 
 bool setAcMode(MatterThermostat::ThermostatMode_t mode) {
   bool state = (mode != MatterThermostat::THERMOSTAT_MODE_OFF);
-  if (acPower != state) {
-    acPower = state;
-    acDirty = true;
-    markStateDirty();
-  }
+  acPower = state;
+  acDirty = true;
+  markStateDirty();
   return true;
 }
 
 bool setAcTemperature(double temp) {
   int targetTemp = (int)round(temp);
   targetTemp = constrain(targetTemp, AC_TEMP_MIN, AC_TEMP_MAX);
-  if (acTemp != targetTemp) {
-    acTemp = targetTemp;
-    acDirty = true;
-    markStateDirty();
-  }
+  acTemp = targetTemp;
+  acDirty = true;
+  markStateDirty();
   return true;
 }
 
@@ -312,12 +300,10 @@ bool setAcFan(MatterFan::FanMode_t mode, uint8_t percent) {
     else targetFanSpeed = kMideaACFanHigh;
   }
   
-  if (acFanSpeed != targetFanSpeed) {
-    acFanSpeed = targetFanSpeed;
-    acDirty = true;
-    markStateDirty();
-    Serial.printf("[AC Fan] Speed mode set to: %d\n", acFanSpeed);
-  }
+  acFanSpeed = targetFanSpeed;
+  acDirty = true;
+  markStateDirty();
+  Serial.printf("[AC Fan] Speed mode set to: %d\n", acFanSpeed);
   return true;
 }
 
