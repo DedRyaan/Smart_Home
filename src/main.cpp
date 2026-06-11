@@ -46,11 +46,10 @@ int      savedAcFanSpeed;
 MatterOnOffLight matterLight1;
 MatterOnOffLight matterLight2;
 MatterOnOffLight matterLight3;
-MatterFan        matterFan;
+MatterOnOffPlugin matterFan;
 MatterThermostat matterAc;
 MatterFan        matterAcFan;
 MatterOnOffLight matterOnboardLed;
-MatterTemperatureSensor matterTempSensor;
 
 bool onboardLedState = false;
 
@@ -254,8 +253,7 @@ bool setLight3OnOff(bool state) {
   return true;
 }
 
-bool setFanOnOff(MatterFan::FanMode_t mode, uint8_t percent) {
-  bool state = (mode != MatterFan::FAN_MODE_OFF);
+bool setFanOnOff(bool state) {
   if (relayState[3] != state) {
     relayState[3] = state;
     applyRelay(3);
@@ -448,7 +446,7 @@ void setup() {
   matterLight1.begin(relayState[0]);
   matterLight2.begin(relayState[1]);
   matterLight3.begin(relayState[2]);
-  matterFan.begin(relayState[3] ? 100 : 0, relayState[3] ? MatterFan::FAN_MODE_ON : MatterFan::FAN_MODE_OFF, MatterFan::FAN_MODE_SEQ_OFF_HIGH);
+  matterFan.begin(relayState[3]);
   
   matterAc.begin(MatterThermostat::THERMOSTAT_SEQ_OP_COOLING_HEATING);
   matterAc.setMode(acPower ? MatterThermostat::THERMOSTAT_MODE_COOL : MatterThermostat::THERMOSTAT_MODE_OFF);
@@ -471,7 +469,6 @@ void setup() {
   matterAcFan.begin(initPercent, initMode, MatterFan::FAN_MODE_SEQ_OFF_LOW_MED_HIGH_AUTO);
 
   matterOnboardLed.begin(onboardLedState);
-  matterTempSensor.begin(25.5);
 
   // Start the Matter protocol stack
   Serial.println("[Matter] Starting stack...");
@@ -571,19 +568,7 @@ void setup() {
   Serial.println("[OTA] Over-The-Air updates initialized.");
 }
 
-uint32_t lastTempUpdateMs = 0;
-#define TEMP_UPDATE_INTERVAL_MS 10000 // 10 seconds
 
-void updateTempSensor() {
-  uint32_t now = millis();
-  if (now - lastTempUpdateMs >= TEMP_UPDATE_INTERVAL_MS) {
-    lastTempUpdateMs = now;
-    // Simulate temperature fluctuating between 24.0 and 27.0
-    double simulatedTemp = 25.5 + 1.5 * sin(now / 50000.0);
-    matterTempSensor.setTemperature(simulatedTemp);
-    Serial.printf("[Temp Sensor] Simulated temperature updated to %.2f C\n", simulatedTemp);
-  }
-}
 
 void loop() {
   ArduinoOTA.handle();
@@ -619,8 +604,7 @@ void loop() {
     sendAc();
   }
 
-  // Update simulated temperature sensor
-  updateTempSensor();
+
 
   // Coalesce state changes and write to NVS
   if (stateDirty && (millis() - lastStateChangeMs) >= PERSIST_DELAY_MS) {
